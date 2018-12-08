@@ -18,7 +18,7 @@ class LinearSelfAtt(nn.Module):
         :return: r: b * h
         """
         # b * m * 1
-        gamma = util.masked_softmax(self.linear(x).suqeeze(2), mask)
+        gamma = util.masked_softmax(self.linear(x).squeeze(2), mask)
         # [b * 1 * m] * [b * m * h] = [b * 1 * h]
         # b * h
         r = gamma.unsqueeze(1).bmm(x).squeeze(1)

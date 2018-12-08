@@ -59,7 +59,7 @@ class IMFusion(nn.Module):
         """
         x_t = x.transpose(0, 1)
         y_t = x.transpose(0, 1)
-        z_t = y_t.new_zeros(y_t)
+        z_t = y_t.new_zeros(y_t.size())
         seq_len = x_t.size(0)
         z_t[0] = y_t[0]
         for i in range(1, seq_len, 1):
