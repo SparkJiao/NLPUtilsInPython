@@ -24,3 +24,44 @@ class IMLayer(nn.Module):
         gate = torch.sigmoid(self.linear(torch.cat([y, i_x]), dim=2))
         output = y + i_x * gate
         return output
+
+
+class IMNetwork(nn.Module):
+    def __init__(self, input_dim):
+        super(IMNetwork, self).__init__()
+        self.im_layer = IMLayer(input_dim)
+
+    def forward(self, x):
+        """
+        :param x: b * seq *  m * h
+        :return: y: b * seq * m * h
+        """
+        x_t = x.transpose(0, 1)
+        y = [x_t[0]]
+        seq_len = x_t.size(0)
+        for i in range(1, seq_len, 1):
+            c_x = y[-1]
+            y.append(self.im_layer(c_x, x_t[i]))
+        result = torch.cat(y, dim=0).transpose(0, 1)
+        return result
+
+
+class IMFusion(nn.Module):
+    def __init__(self, input_dim):
+        super(IMFusion, self).__init__()
+        self.im_layer = IMLayer(input_dim)
+
+    def forward(self, x, y):
+        """
+        :param x: b * seq * m * h
+        :param y: b * seq * n * h
+        :return: b * seq * n * h
+        """
+        x_t = x.transpose(0, 1)
+        y_t = x.transpose(0, 1)
+        z_t = y_t.new_zeros(y_t)
+        seq_len = x_t.size(0)
+        z_t[0] = y_t[0]
+        for i in range(1, seq_len, 1):
+            z_t[i] = self.im_layer(x_t[i - 1], y_t[i])
+        return z_t.transpose(0, 1)
