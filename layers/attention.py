@@ -44,6 +44,6 @@ class MultiHeadSelfAtt(nn.Module):
         results = []
         for i in range(self.num_head):
             results.append(self.multi_head[i](x, mask))
-        result = torch.cat(results, dim=2)
+        result = torch.cat(results, dim=1)
         y = self.linear(result)
         return y
