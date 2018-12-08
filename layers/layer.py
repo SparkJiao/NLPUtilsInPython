@@ -21,7 +21,7 @@ class IMLayer(nn.Module):
         self_x = self.multi_head_self(x)
         # b * n * h
         i_x = self_x.unsqueeze(1).repeat(1, y.size(1), 1)
-        gate = torch.sigmoid(self.linear(torch.cat([y, i_x]), dim=2))
+        gate = torch.sigmoid(self.linear(torch.cat([y, i_x], dim=2)))
         output = y + i_x * gate
         return output
 
@@ -58,7 +58,7 @@ class IMFusion(nn.Module):
         :return: b * seq * n * h
         """
         x_t = x.transpose(0, 1)
-        y_t = x.transpose(0, 1)
+        y_t = y.transpose(0, 1)
         z_t = y_t.new_zeros(y_t.size())
         seq_len = x_t.size(0)
         z_t[0] = y_t[0]
