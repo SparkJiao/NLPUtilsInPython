@@ -21,12 +21,19 @@ domain_mappings = {"mctest": "children_stories", "gutenberg": "literature", "rac
 class CoQAEvaluator():
 
     def __init__(self, gold_file):
-        self.gold_data, self.id_to_source = CoQAEvaluator.gold_answers_to_dict(gold_file)
+        self.gold_data, self.gold_list, self.id_to_source = CoQAEvaluator.gold_answers_to_dict(gold_file)
 
     @staticmethod
     def gold_answers_to_dict(gold_file):
-        dataset = json.load(open(gold_file))
+        # dataset = json.load(open(gold_file))
+        """
+        this is modified by jiao
+        :param gold_file: json
+        :return:
+        """
+        dataset = gold_file
         gold_dict = {}
+        gold_list = []
         id_to_source = {}
         for story in dataset['data']:
             source = story['source']
@@ -49,7 +56,8 @@ class CoQAEvaluator():
                 if key in gold_dict:
                     sys.stderr.write("Gold file has duplicate stories: {}".format(source))
                 gold_dict[key] = gold_answers
-        return gold_dict, id_to_source
+                gold_list.append(gold_answers)
+        return gold_dict, gold_list, id_to_source
 
     @staticmethod
     def preds_to_dict(pred_file):
@@ -120,13 +128,15 @@ class CoQAEvaluator():
 
         return {'em': em_sum / max(1, len(a_gold_list)), 'f1': f1_sum / max(1, len(a_gold_list))}
 
-    def compute_turn_score_seq(self, preds):
+    @staticmethod
+    def compute_turn_score_seq(golds, preds):
         ''' Added by Hsin-Yuan Huang for sequential evaluation. '''
-        assert (len(self.gold_list) == len(preds))
+        """ modified by Jiao"""
+        assert (len(golds) == len(preds))
 
         score = 0
         for i in range(len(preds)):
-            score += CoQAEvaluator._compute_turn_score(self.gold_list[i], preds[i])['f1']
+            score += CoQAEvaluator._compute_turn_score(golds[i], preds[i])['f1']
         return score / len(preds)
 
     def compute_turn_score(self, story_id, turn_id, a_pred):

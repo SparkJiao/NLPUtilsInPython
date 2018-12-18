@@ -31,18 +31,20 @@ class IMNetwork(nn.Module):
         super(IMNetwork, self).__init__()
         self.im_layer = IMLayer(input_dim)
 
-    def forward(self, x):
+    def forward(self, x, x_mask):
         """
         :param x: b * seq *  m * h
+        :param x_mask: b * seq * m
         :return: y: b * seq * m * h
         """
         x_t = x.transpose(0, 1)
-        y = [x_t[0]]
+        mask_t = x_mask.transpose(0, 1)
+        y = x_t.new_zeros(x_t.size())
+        y[0] = x_t[0]
         seq_len = x_t.size(0)
         for i in range(1, seq_len, 1):
-            c_x = y[-1]
-            y.append(self.im_layer(c_x, x_t[i]))
-        result = torch.cat(y, dim=0).transpose(0, 1)
+            y[i] = self.im_layer(y[i - 1], x_t[i], mask_t[i - 1])
+        result = y.transpose(0, 1)
         return result
 
 
