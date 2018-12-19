@@ -1,97 +1,183 @@
-import spacy
+import argparse
 from collections import Counter
 import json
-from spacy.tokens import Token
+from CoQA_eval import CoQAEvaluator
 import logging
+import re
+import string
 
 logger = logging.getLogger()
 
-nlp = spacy.load('en')
+parser = argparse.ArgumentParser('description: experiments on datasets')
+parser.add_argument('input_file')
+parser.add_argument('output_file')
+args = parser.parse_args()
 
 
-def get_max_f1_span(sentences, input_text):
-    answer = Counter(input_text)
+def normalize_answer(s):
+    """Lower text and remove punctuation, articles and extra whitespace."""
 
-    best_sentence = None
-    sen_f1 = 0.0
-    best_sen_index = -1
-    for index, sentence in enumerate(sentences):
-        sen_cnt = Counter(sentence)
-        common = answer & sen_cnt
-        num_same = sum(common.values())
-        if num_same == 0:
-            continue
-        precision = 1.0 * num_same / len(sentence)
-        recall = 1.0 * num_same / len(input_text)
-        f1 = (2 * precision * recall) / (precision + recall)
-        if sen_f1 < f1:
-            sen_f1 = f1
-            best_sentence = sentence
-            best_sen_index = index
-        # print(index, f1)
+    def remove_articles(text):
+        return re.sub(r'\b(a|an|the)\b', ' ', text)
 
-    if best_sen_index == -1:
-        print(input_text)
-        return -1, -1
+    def white_space_fix(text):
+        return ' '.join(text.split())
 
-    base = 0
-    for i in range(best_sen_index):
-        base += len(sentences[i])
-    start = base
-    end = base + len(best_sentence) - 1
+    def remove_punc(text):
+        exclude = set(string.punctuation)
+        return ''.join(ch for ch in text if ch not in exclude)
 
-    return start, end
+    def lower(text):
+        return text.lower()
+
+    return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
-with open('./coqa-dev-v1.0.json', 'r', encoding="utf8") as f:
-    data = json.load(f)['data']
-    # story = data[0]['story'].lower()
-    # tokens = nlp(story)
-    # for token in tokens:
-    #     print(token)
+def len_preserved_normalize_answer(s):
+    """Lower text and remove punctuation, articles and extra whitespace."""
 
-num_qa = 0
-f1_total = 0
-for i, article in enumerate(data):
-    # id = article['id']
-    story = article['story'].lower().replace('\n', ' ')
-    tokens = nlp(story)
-    # print(tokens)
-    sents = nlp(story).sents
-    sentences = []
-    for sent in sents:
-        tmp = []
-        for token in sent:
-            tmp.append(token.text)
-        sentences.append(tmp)
+    def len_preserved_space(matchobj):
+        return ' ' * len(matchobj.group(0))
 
-    answers = article['answers']
-    for answer in answers:
-        r = answer['input_text'].lower()
-        if r == 'yes' or r == 'no' or r == 'unknown':
-            span = (-1, -1)
-            f1 = 1.0
-            pred = r
+    def remove_articles(text):
+        return re.sub(r'\b(a|an|the)\b', len_preserved_space, text)
+
+    def remove_punc(text):
+        exclude = set(string.punctuation)
+        return ''.join(ch if ch not in exclude else " " for ch in text)
+
+    def lower(text):
+        return text.lower()
+
+    return remove_articles(remove_punc(lower(s)))
+
+
+def split_with_span(s):
+    if s.split() == []:
+        return [], []
+    else:
+        return zip(*[(m.group(0), (m.start(), m.end() - 1)) for m in re.finditer(r'\S+', s)])
+
+
+def free_text_to_span(free_text, full_text):
+    if free_text == "unknown":
+        return "__NA__", -1, -1
+    if normalize_answer(free_text) == "yes":
+        return "__YES__", -1, -1
+    if normalize_answer(free_text) == "no":
+        return "__NO__", -1, -1
+
+    free_ls = len_preserved_normalize_answer(free_text).split()
+    full_ls, full_span = split_with_span(len_preserved_normalize_answer(full_text))
+    if full_ls == []:
+        return full_text, 0, len(full_text)
+
+    max_f1, best_index = 0.0, (0, len(full_ls) - 1)
+    free_cnt = Counter(free_ls)
+    for i in range(len(full_ls)):
+        full_cnt = Counter()
+        for j in range(len(full_ls)):
+            if i + j >= len(full_ls): break
+            full_cnt[full_ls[i + j]] += 1
+
+            common = free_cnt & full_cnt
+            num_same = sum(common.values())
+            if num_same == 0: continue
+
+            precision = 1.0 * num_same / (j + 1)
+            recall = 1.0 * num_same / len(free_ls)
+            f1 = (2 * precision * recall) / (precision + recall)
+
+            if max_f1 < f1:
+                max_f1 = f1
+                best_index = (i, j)
+
+    assert (best_index is not None)
+    (best_i, best_j) = best_index
+    char_i, char_j = full_span[best_i][0], full_span[best_i + best_j][1] + 1
+
+    return full_text[char_i:char_j], char_i, char_j
+
+
+def proc_dev(ith, article):
+    rows = []
+    context = article['story']
+
+    for j, (question, answers) in enumerate(zip(article['questions'], article['answers'])):
+        gold_answer = answers['input_text']
+        span_answer = answers['span_text']
+
+        answer, char_i, char_j = free_text_to_span(gold_answer, span_answer)
+        answer_choice = 0 if answer == '__NA__' else \
+            1 if answer == '__YES__' else \
+                2 if answer == '__NO__' else \
+                    3  # Not a yes/no question
+
+        if answer_choice == 3:
+            answer_start = answers['span_start'] + char_i
+            answer_end = answers['span_start'] + char_j
         else:
-            input_text_token = nlp(r)
-            input_text = [token.text for token in input_text_token]
-            # print(input_text)
-            span = get_max_f1_span(sentences, input_text)
-            # print(span)
-            if span == (-1, -1):
-                pred = r
+            answer_start, answer_end = -1, -1
+
+        rationale = answers['span_text']
+        rationale_start = answers['span_start']
+        rationale_end = answers['span_end']
+
+        q_text = question['input_text']
+        # if j > 0:
+        #     q_text = article['answers'][j - 1]['input_text'] + " // " + q_text
+
+        rows.append(
+            (ith, q_text, answer, answer_start, answer_end, rationale, rationale_start, rationale_end, answer_choice))
+    return rows, context
+
+
+out = []
+with open(args.input_file, 'r', encoding="utf8") as f:
+    data = json.load(f)['data']
+    golds = []
+    ex = []
+    for i, article in enumerate(data):
+        rows, context = proc_dev(i, article)
+
+        answers = article['answers']
+        if 'additional_answers' in article:
+            add_answers = article['additional_answers']
+        else:
+            add_answers = {}
+        for j, answer in enumerate(article['answers']):
+            tmp = list()
+            tmp.append(answer['input_text'])
+            for key in add_answers:
+                tmp.append(add_answers[key][j]['input_text'])
+            golds.append(tmp)
+        e_tmp = list()
+        for row in rows:
+            if row[2] == '__NA__':
+                e_tmp.append('unknown')
+            elif row[2] == '__YES__':
+                e_tmp.append('yes')
+            elif row[2] == '__NO__':
+                e_tmp.append('no')
             else:
-                pred = tokens[span[0]:(span[1] + 1)].text
-        # f1_total += f1
-        # print(pred)
-        answer['pred'] = str(pred)
-        answer['pred_start'] = span[0]
-        answer['pred_end'] = span[1]
-    num_qa += len(answers)
-    print("%d / %d" % (i, len(data)))
+                e_tmp.append(row[2])
+        ex.extend(e_tmp)
 
-# final_f1 = f1_total / num_qa
-# print("F1: %s" % (str(final_f1)))
+        q_text = [row[1] for row in rows]
+        answer = [row[2] for row in rows]
+        answer_start = [row[3] for row in rows]
+        answer_end = [row[4] for row in rows]
+        rationale = [row[5] for row in rows]
+        rationale_start = [row[6] for row in rows]
+        rationale_end = [row[7] for row in rows]
+        answer_choice = [row[8] for row in rows]
+        out.append(
+            {'context': context, 'story_id': article['id'], 'q_text': q_text, 'answer': answer, 'answer_start': answer_start,
+             'answer_end': answer_end, 'rationale': rationale, 'rationale_start': rationale_start, 'rationale_end': rationale_end,
+             'answer_choice': answer_choice})
 
-with open('coqa-pred.json', 'w') as f:
-    json.dump(data, f, indent=4)
+    F1 = CoQAEvaluator.compute_turn_score_seq(golds, ex)
+    print('F1: %f' % F1)
+
+with open(args.output_file, 'w') as f:
+    json.dump(out, f, indent=2)
