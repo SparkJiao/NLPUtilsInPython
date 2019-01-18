@@ -122,7 +122,7 @@ def proc_train(ith, article):
 
 
 out = []
-with open(args.input_file, 'r', encoding="utf8") as f:
+with open(args.input_file, 'r') as f:
     data = json.load(f)['data']
     for i, article in enumerate(data):
         rows, context = proc_train(i, article)

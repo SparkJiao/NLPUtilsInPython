@@ -61,11 +61,11 @@ def split_with_span(s):
 
 def free_text_to_span(free_text, full_text):
     if free_text == "unknown":
-        return "__NA__", -1, -1
+        return "Unknown", -1, -1
     if normalize_answer(free_text) == "yes":
-        return "__YES__", -1, -1
+        return "Yes", -1, -1
     if normalize_answer(free_text) == "no":
-        return "__NO__", -1, -1
+        return "No", -1, -1
 
     free_ls = len_preserved_normalize_answer(free_text).split()
     full_ls, full_span = split_with_span(len_preserved_normalize_answer(full_text))
@@ -108,9 +108,9 @@ def proc_dev(ith, article):
         span_answer = answers['span_text']
 
         answer, char_i, char_j = free_text_to_span(gold_answer, span_answer)
-        answer_choice = 0 if answer == '__NA__' else \
-            1 if answer == '__YES__' else \
-                2 if answer == '__NO__' else \
+        answer_choice = 0 if answer == 'Unknown' else \
+            1 if answer == 'Yes' else \
+                2 if answer == 'No' else \
                     3  # Not a yes/no question
 
         if answer_choice == 3:
@@ -124,6 +124,7 @@ def proc_dev(ith, article):
         rationale_end = answers['span_end']
 
         q_text = question['input_text']
+
         # if j > 0:
         #     q_text = article['answers'][j - 1]['input_text'] + " // " + q_text
 
@@ -133,7 +134,7 @@ def proc_dev(ith, article):
 
 
 out = []
-with open(args.input_file, 'r', encoding="utf8") as f:
+with open(args.input_file, 'r') as f:
     data = json.load(f)['data']
     golds = []
     ex = []
@@ -153,11 +154,11 @@ with open(args.input_file, 'r', encoding="utf8") as f:
             golds.append(tmp)
         e_tmp = list()
         for row in rows:
-            if row[2] == '__NA__':
+            if row[2] == 'Unknown':
                 e_tmp.append('unknown')
-            elif row[2] == '__YES__':
+            elif row[2] == 'Yes':
                 e_tmp.append('yes')
-            elif row[2] == '__NO__':
+            elif row[2] == 'No':
                 e_tmp.append('no')
             else:
                 e_tmp.append(row[2])
