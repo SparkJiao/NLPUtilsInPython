@@ -17,9 +17,13 @@ version = dataset['version']
 output_ls = []
 group_num = Counter()
 
+num_a = 0
+num_b = 0
+
 for article in data:
     q = article['questions']
     a = article['answers']
+    num_a += len(article['questions'])
     questions = []
     answers = []
     groups = 0
@@ -33,6 +37,7 @@ for article in data:
                                   'questions': questions,
                                   'answers': answers,
                                   'name': article['name']})
+                num_b += len(questions)
 
             groups += 1
 
@@ -48,6 +53,7 @@ for article in data:
                       'questions': questions,
                       'answers': answers,
                       'name': article['name']})
+    num_b += len(questions)
     groups += 1
     group_num[groups] += 1
 
@@ -55,3 +61,4 @@ with open(args.output_file, 'w') as f:
     json.dump({'version': version, 'data': output_ls}, f, indent=2)
 
 print(json.dumps(group_num, indent=2))
+print(num_a, num_b)
