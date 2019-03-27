@@ -6,13 +6,13 @@ from collections import Counter
 import random
 from copy import deepcopy
 from tqdm import tqdm
+import numpy as np
 
 tokenizer = WordTokenizer(word_splitter=SpacyWordSplitter(pos_tags=True, ner=True))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_file')
 parser.add_argument('--output_file')
-parser.add_argument('--switch_rate', type=float, default=0.4)
 args = parser.parse_args()
 
 pronouns = ['he', 'him', 'his', 'she', 'her', 'it', 'its',
@@ -54,6 +54,8 @@ def question_label(question):
     return False
 
 
+""" This only shuffle train set which does't has the 'additional_answers' key. """
+
 with open(args.input_file, 'r') as f:
     data_file = json.load(f)
 
@@ -64,7 +66,7 @@ else:
 
 print('Length of initial data set: {}'.format(len(data)))
 
-for article in data:
+for article in tqdm(data, desc='Labeling questions...'):
     questions = article['questions']
     for question in questions:
         if question_label(question['input_text']):
@@ -74,7 +76,7 @@ for article in data:
 
 output_data = []
 
-for article in tqdm(data):
+for article in tqdm(data, desc='Shuffling questions in group...'):
 
     art_cp = deepcopy(article)
     do_switch = False
@@ -87,7 +89,7 @@ for article in tqdm(data):
         add_answers = None
     pre = -1
     for i, question in enumerate(questions):
-        if i <= pre:
+        if i < pre:
             continue
         if question['label'] == 'START':
             for j in range(i + 1, len(questions)):
@@ -97,33 +99,27 @@ for article in tqdm(data):
                     idx_ls = range(i + 1, j)
                     if len(idx_ls) == 0:
                         break
-                    sample_num = int(len(idx_ls) * args.switch_rate)
-                    sample_idx = random.sample(idx_ls, sample_num)
+                    # sample_idx = random.sample(idx_ls, len(idx_ls))
+                    sample_idx = np.random.permutation(idx_ls)
+                    turn_id_s = questions[i + 1]['turn_id']
+                    turn_id_e = questions[j - 1]['turn_id']
 
-                    for idx in sample_idx:
-                        if idx + 1 < len(questions):
-                            a_turn_id = questions[idx]['turn_id']
-                            b_turn_id = questions[idx + 1]['turn_id']
+                    sample_questions = [questions[idx] for idx in sample_idx]
+                    for idx, sample in enumerate(sample_questions):
+                        questions[i + 1 + idx] = sample
+                        questions[i + 1 + idx]['turn_id'] = turn_id_s + idx
+                    sample_answers = [answers[idx] for idx in sample_idx]
+                    for idx, sample in enumerate(sample_answers):
+                        answers[i + 1 + idx] = sample
+                        answers[i + 1 + idx]['turn_id'] = turn_id_s + idx
+                    assert questions[i + len(idx_ls)]['turn_id'] == turn_id_e
 
-                            questions[idx], questions[idx + 1] = questions[idx + 1], questions[idx]
-                            questions[idx]['turn_id'] = a_turn_id
-                            questions[idx + 1]['turn_id'] = b_turn_id
-                            answers[idx], answers[idx + 1] = answers[idx + 1], answers[idx]
-                            answers[idx]['turn_id'] = a_turn_id
-                            answers[idx + 1]['turn_id'] = b_turn_id
-                            if add_answers is not None:
-                                for x in add_answers:
-                                    add_answers[x][idx], add_answers[x][idx + 1] = add_answers[x][idx + 1], add_answers[x][idx]
-                                    add_answers[x][idx]['turn_id'] = a_turn_id
-                                    add_answers[x][idx + 1]['turn_id'] = b_turn_id
-
-                            do_switch = True
+                    do_switch = True
 
     output_data.append(art_cp)
     if do_switch:
         article['id'] += '$'
         output_data.append(article)
-
 
 print('Length of new data set: {}'.format(len(output_data)))
 
