@@ -13,6 +13,7 @@ tokenizer = WordTokenizer(word_splitter=SpacyWordSplitter(pos_tags=True, ner=Tru
 parser = argparse.ArgumentParser()
 parser.add_argument('--input_file')
 parser.add_argument('--output_file')
+parser.add_argument('--sample_rate', type=float, default=1.0)
 args = parser.parse_args()
 
 pronouns = ['he', 'him', 'his', 'she', 'her', 'it', 'its',
@@ -118,8 +119,10 @@ for article in tqdm(data, desc='Shuffling questions in group...'):
 
     output_data.append(art_cp)
     if do_switch:
-        article['id'] += '$'
-        output_data.append(article)
+        sample_rand = random.randint(0, 100) / 100.0
+        if sample_rand <= args.sample_rate:
+            article['id'] += '$'
+            output_data.append(article)
 
 print('Length of new data set: {}'.format(len(output_data)))
 
